@@ -24,14 +24,6 @@ with open(file, 'r') as f:
     soup = BeautifulSoup(f, 'html.parser')
 
 
-def tag_index_ignore_class(tag, ignored_class):
-    siblings = [
-        child for child in tag.parent.find_all(recursive=False)
-        if ignored_class not in (child.get('class') or [])
-    ]
-    return siblings.index(tag)
-
-
 def remove_nbsp(lst):
     i = 1
     for x in lst[1:]:
