@@ -1,9 +1,9 @@
 # uocal
-A Python script that converts your uOttawa schedule into an ics file importable by Google Calendar and Apple Calendar.
+A Python script that converts your uOttawa schedule into a `.ics` file importable by Google Calendar and Apple Calendar.
 
 ## Usage
 0. Install [Python](https://python.org).
-1. Clone the repo
+1. Clone the repo.
 2. Save your schedule from uOZone:
    1. Open the application "My Class Schedule" on uOZone.
    2. Choose your desired semester.
