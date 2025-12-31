@@ -1,5 +1,5 @@
 # uocal
-A Python script that converts your uOttawa schedule into a `.ics` file importable by Google Calendar and Apple Calendar.
+A Python script that converts your uOttawa schedule into a `.ics` file importable by Google Calendar, Apple Calendar or any other calendar app supporting `.ics` files.
 
 ## Usage
 0. Install [Python](https://python.org).
@@ -19,4 +19,4 @@ pip3 install -r requirements.txt
 python3 main.py schedule.html
 ```
 
-4. Now, you should see a `schedule.ics` file appear in the same directory as the Python script. This file can be imported into Google Calendar or Apple Calendar.
+4. Now, you should see a `schedule.ics` file appear in the same directory as the Python script. This file can be imported into Google Calendar, Apple Calendar or any other calendar app supporting `.ics` files.
