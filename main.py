@@ -72,11 +72,12 @@ for block in course_blocks:
         time = schedule[i][3:].split(' - ')
         start_time = time[0]
         end_time = time[1].split(':')
-        end_hour = int(end_time[0]) + (12 if end_time[1][2] == 'P' and int(end_time[0]) < 12 else 0)
+        end_hour = int(end_time[0]) + (12 if 'PM' in end_time[1].upper() and int(end_time[0]) < 12 else 0)
         end_min = int(end_time[1][:2])
         dow = schedule[i][:2]
 
-        dt = datetime.strptime(f'{start_time} {start_date}', '%I:%M%p %m/%d/%Y').replace(tzinfo=ZoneInfo('America/Toronto'))
+        dt = datetime.strptime(f'{start_time} {start_date}', '%I:%M%p %m/%d/%Y') \
+            .replace(tzinfo=ZoneInfo('America/Toronto'))
         target = days_of_week.index(dow)
         offset = target - dt.weekday()
         dt = dt + timedelta(days=offset)
@@ -86,7 +87,7 @@ for block in course_blocks:
         course_title_splitted = course_title.split(' - ')
         course_code = course_title_splitted[0]
         course_name = course_title_splitted[1]
-        e.name = f'{components[i]} - {course_code}'
+        e.name = f'{components[i][:3].upper()} {course_code}'
         e.description = f'{course_name}\nProf: {profs[i]}'
 
         e.location = locations[i]
@@ -101,6 +102,7 @@ for block in course_blocks:
         c.events.add(e)
 
 
+"""
 five_weeks_later = dt + timedelta(weeks=5)
 
 days_since_sunday = (five_weeks_later.weekday() + 1) % 7
@@ -156,6 +158,8 @@ for event in c.events:
 
 
 c.events = new_events
+"""
+
 
 with open('schedule.ics', 'w') as f:
     f.writelines(c.serialize_iter())
