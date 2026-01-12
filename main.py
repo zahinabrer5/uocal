@@ -76,8 +76,15 @@ for block in course_blocks:
         end_min = int(end_time[1][:2])
         dow = schedule[i][:2]
 
-        dt = datetime.strptime(f'{start_time} {start_date}', '%I:%M%p %m/%d/%Y') \
-            .replace(tzinfo=ZoneInfo('America/Toronto'))
+        try:
+            dt = datetime.strptime(f'{start_time} {start_date}', '%I:%M%p %m/%d/%Y') \
+                .replace(tzinfo=ZoneInfo('America/Toronto'))
+        except Exception as e:
+            try:
+                dt = datetime.strptime(f'{start_time} {start_date}', '%H:%M %m/%d/%Y') \
+                    .replace(tzinfo=ZoneInfo('America/Toronto'))
+            except Exception as f:
+                raise f
         target = days_of_week.index(dow)
         offset = target - dt.weekday()
         dt = dt + timedelta(days=offset)
