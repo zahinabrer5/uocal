@@ -2,8 +2,6 @@ import re
 import sys
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
-from ics import Calendar, Event
-from ics.grammar.parse import ContentLine
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -32,6 +30,9 @@ def remove_nbsp(lst):
         i += 1
     return lst
 
+def format_dt_local(dt):
+    """Format datetime in local timezone for ICS (no Z suffix)"""
+    return dt.strftime('%Y%m%dT%H%M%S')
 
 # use 'List View'
 
@@ -45,9 +46,11 @@ loc = re.compile('MTG_LOC')
 instr = re.compile('INSTR_LONG')
 dates = re.compile('MTG_DATES')
 
-c = Calendar()
-
 course_blocks = soup.find_all(class_='PSGROUPBOXWBO')[1:]
+
+toronto_tz = ZoneInfo('America/Toronto')
+events = []
+
 for block in course_blocks:
     course_title = block.find(class_='PAGROUPDIVIDER').text
     skip = False
@@ -71,102 +74,75 @@ for block in course_blocks:
 
         time = schedule[i][3:].split(' - ')
         start_time = time[0]
-        end_time = time[1].split(':')
-        end_hour = int(end_time[0]) + (12 if 'PM' in end_time[1].upper() and int(end_time[0]) < 12 else 0)
-        end_min = int(end_time[1][:2])
+        end_time_str = time[1]
+
+        # Parse end time properly
+        end_time_parts = end_time_str.split(':')
+        end_hour_raw = int(end_time_parts[0])
+        end_min = int(end_time_parts[1][:2])
+        is_pm = 'PM' in end_time_str.upper()
+        end_hour = end_hour_raw + (12 if is_pm and end_hour_raw < 12 else 0)
+        if end_hour_raw == 12 and not is_pm:
+            end_hour = 0
+
         dow = schedule[i][:2]
 
         try:
-            dt = datetime.strptime(f'{start_time} {start_date}', '%I:%M%p %m/%d/%Y') \
-                .replace(tzinfo=ZoneInfo('America/Toronto'))
+            dt_start = datetime.strptime(f'{start_time} {start_date}', '%I:%M%p %m/%d/%Y') \
+                .replace(tzinfo=toronto_tz)
         except Exception as e:
             try:
-                dt = datetime.strptime(f'{start_time} {start_date}', '%H:%M %m/%d/%Y') \
-                    .replace(tzinfo=ZoneInfo('America/Toronto'))
+                dt_start = datetime.strptime(f'{start_time} {start_date}', '%H:%M %m/%d/%Y') \
+                    .replace(tzinfo=toronto_tz)
             except Exception as f:
                 raise f
-        target = days_of_week.index(dow)
-        offset = target - dt.weekday()
-        dt = dt + timedelta(days=offset)
 
-        e = Event()
+        target = days_of_week.index(dow)
+        offset = target - dt_start.weekday()
+        dt_start = dt_start + timedelta(days=offset)
+
+        dt_end = dt_start.replace(hour=end_hour, minute=end_min)
+        if dt_end <= dt_start:
+            dt_end = dt_end + timedelta(days=1)
 
         course_title_splitted = course_title.split(' - ')
         course_code = course_title_splitted[0]
         course_name = course_title_splitted[1]
-        e.name = f'{components[i][:3].upper()} {course_code}'
-        e.description = f'{course_name}\nProf: {profs[i]}'
 
-        e.location = locations[i]
+        event_name = f'{components[i][:3].upper()} {course_code}'
+        event_desc = f'{course_name}\\nProf: {profs[i]}'
+        event_loc = locations[i]
 
-        e.begin = dt
-        e.end = dt.replace(hour=end_hour, minute=end_min)
-        end_dt = datetime.strptime(end_date, '%m/%d/%Y') + timedelta(days=1)
+        end_dt = datetime.strptime(end_date, '%m/%d/%Y').replace(
+            hour=23, minute=59, second=59, tzinfo=toronto_tz
+        )
 
-        rule = f'FREQ=WEEKLY;UNTIL={end_dt.strftime("%Y%m%dT%H%M%SZ")}'
-        e.extra.append(ContentLine(name="RRULE", value=rule))
-
-        c.events.add(e)
-
-
-"""
-five_weeks_later = dt + timedelta(weeks=5)
-
-days_since_sunday = (five_weeks_later.weekday() + 1) % 7
-rw_start = five_weeks_later - timedelta(days=days_since_sunday)
-rw_end = rw_start + timedelta(days=6)
-
-new_events = set()
-
-for event in c.events:
-    is_recurring = any(line.name == 'RRULE' for line in event.extra)
-
-    if is_recurring:
-        current_day = rw_start
-        while current_day <= rw_end:
-            if current_day.weekday() == event.begin.weekday():
-                # IMPORTANT: EXDATE must match the start time of the event exactly
-                # Format: YYYYMMDDTHHMMSS
-                # we use the time from event.begin but the date from current_day
-                exdate_dt = current_day.replace(
-                    hour=event.begin.hour,
-                    minute=event.begin.minute,
-                    second=0,
-                    tzinfo=event.begin.tzinfo
-                )
-
-                exdate_str = exdate_dt.strftime("%Y%m%dT%H%M%S")
-
-                params = {}
-                if event.begin.tzinfo:
-                    params['TZID'] = [str(event.begin.tzinfo)]
-
-                event.extra.append(ContentLine(
-                    name='EXDATE',
-                    params=params,
-                    value=exdate_str
-                ))
-
-            current_day += timedelta(days=1)
-
-        new_events.add(event)
-
-    else:
-        # one-off event filtering logic
-        e_start = event.begin.datetime
-        e_end = event.end.datetime
-
-        # use aware comparison to avoid errors
-        rw_start_aware = rw_start.replace(tzinfo=event.begin.tzinfo)
-        rw_end_aware = rw_end.replace(hour=23, minute=59, tzinfo=event.begin.tzinfo)
-
-        if not (e_start <= rw_end_aware and e_end >= rw_start_aware):
-            new_events.add(event)
+        events.append({
+            'name': event_name,
+            'description': event_desc,
+            'location': event_loc,
+            'start': dt_start,
+            'end': dt_end,
+            'until': end_dt
+        })
 
 
-c.events = new_events
-"""
-
-
+# Write ICS file manually with proper timezone handling
 with open('schedule.ics', 'w') as f:
-    f.writelines(c.serialize_iter())
+    f.write('BEGIN:VCALENDAR\r\n')
+    f.write('VERSION:2.0\r\n')
+    f.write('PRODID:-//My Calendar//EN\r\n')
+    f.write('CALSCALE:GREGORIAN\r\n')
+
+    for event in events:
+        f.write('BEGIN:VEVENT\r\n')
+        f.write(f'DTSTART;TZID=America/Toronto:{format_dt_local(event["start"])}\r\n')
+        f.write(f'DTEND;TZID=America/Toronto:{format_dt_local(event["end"])}\r\n')
+        f.write(f'RRULE:FREQ=WEEKLY;UNTIL={format_dt_local(event["until"])}\r\n')
+        f.write(f'SUMMARY:{event["name"]}\r\n')
+        f.write(f'DESCRIPTION:{event["description"]}\r\n')
+        f.write(f'LOCATION:{event["location"]}\r\n')
+        f.write(f'UID:{hash(event["name"] + str(event["start"]))}@schedule\r\n')
+        f.write('END:VEVENT\r\n')
+
+    f.write('END:VCALENDAR\r\n')
